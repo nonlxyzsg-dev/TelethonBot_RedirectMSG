@@ -134,7 +134,7 @@ async def connect_with_fallback(
             )
             log.info("Успешное подключение: %s", label)
             return client
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             last_error = exc
             log.warning("Таймаут (%.1f с): %s", connect_timeout, label)
         except (ConnectionError, OSError) as exc:

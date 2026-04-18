@@ -37,12 +37,10 @@ def migrate_legacy_session(session_name: str) -> bool:
         return False
 
     try:
-        legacy.resolve() == target.resolve()
-    except OSError:
-        pass
-    else:
         if legacy.resolve() == target.resolve():
             return False
+    except OSError:
+        pass
 
     try:
         shutil.copy2(legacy, target)

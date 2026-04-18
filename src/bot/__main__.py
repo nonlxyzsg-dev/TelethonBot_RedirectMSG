@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sys
-from pathlib import Path
 
 from telethon import TelegramClient
 from telethon.network import ConnectionTcpMTProxyRandomizedIntermediate
@@ -102,7 +100,7 @@ async def _confirm_chats(client: TelegramClient, settings: Settings) -> tuple[in
             log.error("Не удалось найти чат: %s", exc)
             new_id = input("Введите корректный ID чата для мониторинга или 'exit': ").strip()
             if new_id.lower() == "exit":
-                raise SystemExit(0)
+                raise SystemExit(0) from exc
             try:
                 monitored = int(new_id)
             except ValueError:

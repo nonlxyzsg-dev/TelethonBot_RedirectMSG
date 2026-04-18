@@ -131,10 +131,7 @@ async def _handle_media(
 async def _handle_webpage(client: TelegramClient, message, redirect_chat_id: int) -> None:
     url = getattr(message.media.webpage, "url", None) if message.media.webpage else None
     text = message.text
-    if text and url and url not in text:
-        payload = f"{text}\n{url}"
-    else:
-        payload = text or url
+    payload = f"{text}\n{url}" if text and url and url not in text else (text or url)
     if not payload:
         return
     await _with_retry(

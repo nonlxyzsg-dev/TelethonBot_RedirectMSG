@@ -16,7 +16,8 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import OrderedDict
-from typing import Generic, Hashable, TypeVar
+from collections.abc import Hashable
+from typing import Generic, TypeVar
 
 T = TypeVar("T", bound=Hashable)
 
