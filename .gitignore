@@ -1,0 +1,30 @@
+# Секреты и локальные данные (никогда не коммитить)
+.env
+config.json
+config.json.bak
+*.session
+*.session-journal
+
+# Временные файлы бота
+temp_files/
+telethon_log.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# PyInstaller
+build/
+dist/
+*.spec.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Changelog генерируется semantic-release автоматически в CI

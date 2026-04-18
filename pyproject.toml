@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telethonbot-redirectmsg"
+version = "0.1.0"
+description = "Telegram-бот для автоматической пересылки сообщений между чатами с поддержкой MTProxy"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "nonlxyzsg-dev" }]
+dependencies = [
+    "telethon>=1.36,<2.0",
+    "python-dotenv>=1.0,<2.0",
+    "python-socks[asyncio]>=2.5,<3.0",
+    "cryptg>=0.4,<0.5",
+]
+
+[project.scripts]
+telethonbot = "bot.__main__:run"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+commit_parser = "angular"
+build_command = ""
+changelog_file = "CHANGELOG.md"
+upload_to_vcs_release = false
+tag_format = "v{version}"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["feat", "fix", "perf", "refactor", "docs", "style", "test", "build", "ci", "chore"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
