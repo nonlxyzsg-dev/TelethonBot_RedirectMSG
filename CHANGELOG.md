@@ -1,6 +1,122 @@
 # CHANGELOG
 
 
+## v1.1.0 (2026-05-03)
+
+### Documentation
+
+- Разделы про темы форума, Linux-сборку и слои настроек
+  ([`1ae4c36`](https://github.com/nonlxyzsg-dev/TelethonBot_RedirectMSG/commit/1ae4c36e40c5b43dda5ad812dd44672146661626))
+
+README.md обновлён под новые возможности:
+
+- Шапка: упомянуто "из нескольких чатов" и раскладка по темам форума - Быстрый старт: добавлен
+  Linux-вариант (chmod +x + ./binary), вариант с готовым config.json (положить рядом — само
+  заработает) - MONITORED_CHAT_IDS: csv-формат для нескольких источников - Новый раздел
+  "Маршрутизация по темам форума": * Формат правил с примером из реального конфига * Семантика:
+  пустой include = всё, пустой exclude = ничего не отбрасываем, регистр не важен, копируется во ВСЕ
+  совпавшие темы * Таблица "Где хранить правила": config.json vs routes.json vs отключить через
+  USE_TOPICS=false * Схема слоёв: .env.example ← .env ← environ ← config.json - FAQ: добавлен пункт
+  про неверный id темы - Раздел Dev: pyinstaller bot.spec собирает под текущую ОС
+
+https://claude.ai/code/session_012MpDrwPvqg932vuAhYpdn5
+
+### Features
+
+- Layered конфиг, список источников, use_topics, чтение JSON поверх .env
+  ([`e04cc63`](https://github.com/nonlxyzsg-dev/TelethonBot_RedirectMSG/commit/e04cc63f24810d13d47d6ce5ecf689419f3b02a2))
+
+Стратегия загрузки настроек переписана на слои (каждый следующий перетирает предыдущий): 1.
+  Хардкод-дефолты 2. Шаблонный .env.example рядом с приложением 3. Пользовательский .env 4.
+  Переменные окружения (os.environ) 5. config.json — поверх всего
+
+Это значит: можно просто положить рядом config.json (как у пользователей со старой расширенной
+  версии — с массивом monitored_chat_id, флагом use_topics и секцией tags_for_topics) — и всё
+  заработает без миграции, без ручных правок .env. JSON — последний слой, перебивает всё.
+
+Изменения в Settings: - monitored_chat_id (int) → monitored_chat_ids (tuple[int, ...]) - Новые поля:
+  use_topics: bool, topic_rules: tuple[TopicRule, ...]
+
+Парсинг чисел: - _parse_int_list принимает list[int], int или csv-строку - _to_bool понимает
+  true/yes/1/on/да + bool
+
+Источники правил тем: - config.json → секция tags_for_topics (как в проекте пользователя) -
+  routes.json (сайдкар рядом с .env) — если нет config.json - иначе пустые правила
+
+Удалено: - migrate_legacy_if_needed() — больше не нужно: JSON и так читается напрямую и поверх .env,
+  ничего никуда переносить не надо
+
+Тесты (16 шт.): - Хелперы: _parse_int_list, _to_bool, _is_missing(0) - Загрузка из .env (одиночный
+  id и csv) - JSON перетирает .env (api_id, hash, монитор, редирект) - Реальный конфиг пользователя
+  (массив + use_topics + tags_for_topics) - Сайдкар routes.json рядом с .env
+
+https://claude.ai/code/session_012MpDrwPvqg932vuAhYpdn5
+
+- Маршрутизация в темы форума и пересылка с нескольких источников
+  ([`6231bfa`](https://github.com/nonlxyzsg-dev/TelethonBot_RedirectMSG/commit/6231bfa482d4773c6c35a2fe1d16d90dbee88171))
+
+handler.py: - register_handler принимает monitored_chat_ids (Iterable), use_topics, topic_rules —
+  Telethon NewMessage с chats=list слушает все источники одним обработчиком - Новая функция
+  _resolve_targets: возвращает список reply_to для каждой темы, чьи правила сработали по хэштегам
+  сообщения. Если правил нет или ни одно не подошло — отправляем в General (None). - _handle_album:
+  collect_hashtags по всем сообщениям группы, затем цикл send_file по каждому совпавшему reply_to с
+  одним и тем же набором файлов и caption (Telegram-форум: id=1 это General, reply_to=None ↔ General
+  через reply_to_for_topic) - _handle_media/_handle_text/_handle_webpage: те же правила, теги берём
+  из caption или message.text
+
+__main__.py: - _confirm_chats работает со списком источников: проверяет каждый, убирает недоступные
+  (с подтверждением), позволяет переопределить список через csv-ввод - register_handler вызывается с
+  use_topics и topic_rules из Settings
+
+.env.example: - Раздел про слои настроек (.env.example → .env → environ → config.json) -
+  MONITORED_CHAT_IDS вместо MONITORED_CHAT_ID, поддержка csv - Раздел про USE_TOPICS и routes.json
+  sidecar
+
+routing.py: - Минорный refactor по замечанию ruff (return not (...))
+
+https://claude.ai/code/session_012MpDrwPvqg932vuAhYpdn5
+
+- Модуль routing с парсингом хэштегов и матчингом тем форума
+  ([`cd5ef3f`](https://github.com/nonlxyzsg-dev/TelethonBot_RedirectMSG/commit/cd5ef3f442961d04a99c747ec74d037d12f96625))
+
+src/bot/routing.py: - TopicRule(dataclass): include_or/and, exclude_or/and для одной темы -
+  extract_hashtags(): достаёт #теги из текста (Unicode \w, поддержка кириллицы), нормализует в
+  нижний регистр - collect_hashtags(): объединяет теги по списку сообщений (для альбомов) -
+  parse_topic_rules(): преобразует секцию tags_for_topics из конфига в список TopicRule -
+  matching_topics(): возвращает все темы, чьи правила пропустили сообщение (slать копию во ВСЕ
+  совпавшие темы) - reply_to_for_topic(): тема id=1 это General в Telegram-форумах, для неё reply_to
+  не передаётся
+
+Семантика правил: - Пустой include or:[] = "фильтра нет, проходит всё" - include or:[#X, #Y] = хотя
+  бы один тег - include and:[#X, #Y] = все теги одновременно - Аналогично для exclude - Регистр
+  игнорируется: #Трейд == #трейд
+
+Тесты (27 шт., все зелёные): - Парсинг хэштегов: латиница, кириллица, регистр, пунктуация - Матчинг
+  правил: пустые, or, and, комбинации include+exclude - Реальный конфиг пользователя: 8 тем, разные
+  комбинации тегов (#Indiana_jones+#трейд → 1, 9233, 9211; без тегов → 1, 9278; и т.д.)
+
+https://claude.ai/code/session_012MpDrwPvqg932vuAhYpdn5
+
+- Сборка Linux-бинарника в авторелизе
+  ([`7842c96`](https://github.com/nonlxyzsg-dev/TelethonBot_RedirectMSG/commit/7842c96255d9c880d7e8af1a715f5803a33a4eab))
+
+Раньше релиз содержал только Windows EXE — теперь к нему добавлен Linux onefile-бинарник, собранный
+  через PyInstaller на ubuntu-latest.
+
+Изменения в release.yml: - Новый job build-linux работает параллельно с build-windows (оба зависят
+  только от semantic-release) - Артефакты переименованы: * TelethonBot-vX.Y.Z-windows (содержит
+  .exe) * TelethonBot-vX.Y.Z-linux (содержит исполняемый бинарник) - publish зависит от обоих билдов
+  и аплоадит в Release оба файла - chmod +x на Linux-бинарнике после download (artifact теряет
+  permissions при упаковке)
+
+Использование: - Windows: скачать TelethonBot-vX.Y.Z.exe, запустить - Linux: скачать
+  TelethonBot-vX.Y.Z-linux, ./TelethonBot-vX.Y.Z-linux (chmod +x уже установлен в самом релизе)
+
+В обоих случаях рядом можно положить .env, config.json, proxies.txt — работает портативно одинаково.
+
+https://claude.ai/code/session_012MpDrwPvqg932vuAhYpdn5
+
+
 ## v1.0.0 (2026-04-18)
 
 ### Bug Fixes

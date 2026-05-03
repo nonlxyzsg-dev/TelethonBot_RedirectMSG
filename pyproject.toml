@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "telethonbot-redirectmsg"
-version = "1.0.0"
+version = "1.1.0"
 description = "Telegram-бот для автоматической пересылки сообщений между чатами с поддержкой MTProxy"
 readme = "README.md"
 requires-python = ">=3.11"
