@@ -72,13 +72,13 @@ jobs:
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TelethonBot-${{ needs.semantic-release.outputs.tag }}
+          name: TelethonBot-${{ needs.semantic-release.outputs.tag }}-windows
           path: dist/TelethonBot-${{ needs.semantic-release.outputs.tag }}.exe
           if-no-files-found: error
 
-  publish:
-    name: Публикация релиза
-    needs: [semantic-release, build-windows]
+  build-linux:
+    name: Сборка Linux-бинарника
+    needs: semantic-release
     if: needs.semantic-release.outputs.released == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -86,11 +86,56 @@ jobs:
         with:
           ref: ${{ needs.semantic-release.outputs.tag }}
 
-      - name: Download EXE artifact
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build Linux binary
+        env:
+          PYI_EXE_NAME: TelethonBot-${{ needs.semantic-release.outputs.tag }}-linux
+        run: |
+          pyinstaller bot.spec
+          chmod +x dist/TelethonBot-${{ needs.semantic-release.outputs.tag }}-linux
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelethonBot-${{ needs.semantic-release.outputs.tag }}-linux
+          path: dist/TelethonBot-${{ needs.semantic-release.outputs.tag }}-linux
+          if-no-files-found: error
+
+  publish:
+    name: Публикация релиза
+    needs: [semantic-release, build-windows, build-linux]
+    if: needs.semantic-release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.semantic-release.outputs.tag }}
+
+      - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: TelethonBot-${{ needs.semantic-release.outputs.tag }}
+          name: TelethonBot-${{ needs.semantic-release.outputs.tag }}-windows
           path: ./artifacts
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: TelethonBot-${{ needs.semantic-release.outputs.tag }}-linux
+          path: ./artifacts
+
+      - name: Make Linux binary executable
+        run: chmod +x ./artifacts/TelethonBot-${{ needs.semantic-release.outputs.tag }}-linux
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -100,6 +145,7 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/TelethonBot-${{ needs.semantic-release.outputs.tag }}.exe
+            artifacts/TelethonBot-${{ needs.semantic-release.outputs.tag }}-linux
             .env.example
             proxies.txt
             README.md
