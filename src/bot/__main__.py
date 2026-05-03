@@ -85,46 +85,78 @@ async def _authorize_if_needed(client: TelegramClient, settings: Settings) -> No
         await client.start()
 
 
-async def _confirm_chats(client: TelegramClient, settings: Settings) -> tuple[int, int]:
-    """Подтверждает доступ к monitored_chat_id и redirect_chat_id. Возвращает финальную пару."""
-    monitored = settings.monitored_chat_id
+async def _confirm_chats(
+    client: TelegramClient, settings: Settings
+) -> tuple[tuple[int, ...], int]:
+    """Проверяет доступ ко всем источникам и получателю. Возвращает (sources, redirect)."""
+    monitored: tuple[int, ...] = settings.monitored_chat_ids
     redirect = settings.chat_id_to_redirect_messages
 
     await client.get_dialogs()
 
     while True:
+        bad: list[int] = []
+        names: dict[int, str] = {}
         try:
-            m_entity = await client.get_entity(monitored)
+            for chat_id in monitored:
+                entity = await client.get_entity(chat_id)
+                names[chat_id] = (
+                    getattr(entity, "title", None)
+                    or getattr(entity, "username", None)
+                    or str(chat_id)
+                )
+        except ValueError as exc:
+            log.error("Не удалось найти источник: %s", exc)
+            bad.append(chat_id)
+
+        try:
             r_entity = await client.get_entity(redirect)
         except ValueError as exc:
-            log.error("Не удалось найти чат: %s", exc)
-            new_id = input("Введите корректный ID чата для мониторинга или 'exit': ").strip()
+            log.error("Не удалось найти получателя %s: %s", redirect, exc)
+            new_id = input("Введите ID получателя или 'exit': ").strip()
             if new_id.lower() == "exit":
                 raise SystemExit(0) from exc
             try:
-                monitored = int(new_id)
+                redirect = int(new_id)
             except ValueError:
                 print("ID должен быть числом.")
             continue
 
-        m_name = getattr(m_entity, "title", None) or getattr(m_entity, "username", str(monitored))
-        r_name = getattr(r_entity, "title", None) or getattr(r_entity, "username", str(redirect))
+        if bad:
+            print(f"Не найдены источники: {bad}. Удалить из списка? [Y/n]: ", end="")
+            if input().strip().lower() in ("", "y", "yes", "да"):
+                monitored = tuple(c for c in monitored if c not in bad)
+                if not monitored:
+                    print("Не осталось ни одного источника. Введите id через запятую:")
+                    raw = input().strip()
+                    monitored = tuple(int(p.strip()) for p in raw.split(",") if p.strip())
+                continue
+            raise SystemExit(0)
 
+        r_name = (
+            getattr(r_entity, "title", None)
+            or getattr(r_entity, "username", None)
+            or str(redirect)
+        )
+        sources_desc = ", ".join(f"'{names[c]}' ({c})" for c in monitored)
+        topics_desc = " с маршрутизацией по темам" if settings.use_topics else ""
         answer = input(
-            f"Пересылать из '{m_name}' в '{r_name}'? [Y/n]: "
+            f"Пересылать из [{sources_desc}] в '{r_name}' ({redirect}){topics_desc}? [Y/n]: "
         ).strip().lower()
         if answer in ("", "y", "yes", "да"):
-            log.warning("Мониторим '%s' (%s) → '%s' (%s)", m_name, m_entity.id, r_name, r_entity.id)
+            log.warning(
+                "Мониторим %d источников → '%s' (%s)%s",
+                len(monitored), r_name, r_entity.id, topics_desc,
+            )
             return monitored, redirect
-        if answer in ("n", "no", "нет"):
-            try:
-                monitored = int(input("Новый monitored_chat_id: ").strip())
-                redirect = int(input("Новый chat_id_to_redirect_messages: ").strip())
-            except ValueError:
-                print("ID должны быть числами, повтор.")
-                continue
-        elif answer in ("exit", "выход"):
+        if answer in ("exit", "выход"):
             raise SystemExit(0)
+        try:
+            raw = input("Введите id источников через запятую: ").strip()
+            monitored = tuple(int(p.strip()) for p in raw.split(",") if p.strip())
+            redirect = int(input("Введите id получателя: ").strip())
+        except ValueError:
+            print("Все id должны быть числами, повтор.")
 
 
 async def run_async() -> None:
@@ -150,8 +182,19 @@ async def run_async() -> None:
         client = await _start_client(settings)
         await _authorize_if_needed(client, settings)
         monitored, redirect = await _confirm_chats(client, settings)
-        register_handler(client, monitored, redirect, temp_dir)
-        log.warning("Клиент запущен и слушает новые сообщения. Ctrl+C для остановки.")
+        register_handler(
+            client,
+            monitored,
+            redirect,
+            temp_dir,
+            use_topics=settings.use_topics,
+            topic_rules=settings.topic_rules,
+        )
+        log.warning(
+            "Клиент запущен. Источников: %d, темы: %s. Ctrl+C для остановки.",
+            len(monitored),
+            "включены" if settings.use_topics else "выключены",
+        )
         await client.run_until_disconnected()
     finally:
         if client is not None:

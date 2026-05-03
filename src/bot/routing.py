@@ -52,9 +52,7 @@ def _matches(tags: set[str], rule: TopicRule) -> bool:
         return False
     if exc_or and (tags & exc_or):
         return False
-    if exc_and and exc_and.issubset(tags):
-        return False
-    return True
+    return not (exc_and and exc_and.issubset(tags))
 
 
 def extract_hashtags(text: str | None) -> set[str]:
