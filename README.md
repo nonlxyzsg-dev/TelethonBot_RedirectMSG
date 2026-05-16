@@ -170,6 +170,159 @@ Telegram попросил подождать N секунд — бот сам ж
 
 ---
 
+## Запуск на VPS (Linux)
+
+Шаги ниже — для свежей Ubuntu/Debian VPS. На других дистрибутивах
+поменяется только пакетный менеджер.
+
+### 1. Подключиться и подготовить папку
+
+```bash
+ssh user@<ip-вашей-vps>
+mkdir -p ~/telethonbot && cd ~/telethonbot
+```
+
+Все файлы бота держим в одной папке — он портативный, в системные
+каталоги ничего не пишет.
+
+### 2. Скачать релиз
+
+Зайдите на страницу [Releases](../../releases), скопируйте ссылки на
+`TelethonBot-vX.Y.Z-linux` и `.env.example` (правый клик по ассету →
+"Копировать адрес ссылки"), затем на VPS:
+
+```bash
+curl -L -o telethonbot   "https://github.com/<owner>/<repo>/releases/download/vX.Y.Z/TelethonBot-vX.Y.Z-linux"
+curl -L -o .env.example  "https://github.com/<owner>/<repo>/releases/download/vX.Y.Z/.env.example"
+chmod +x telethonbot
+```
+
+### 3. Заполнить `.env`
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Минимум, что нужно вписать — `API_ID`, `API_HASH`,
+`MONITORED_CHAT_IDS`, `CHAT_ID_TO_REDIRECT_MESSAGES` (как их получить —
+см. раздел "Где взять значения для `.env`" выше). Сохранить:
+`Ctrl+O`, `Enter`, `Ctrl+X`.
+
+### 4. Первый запуск — авторизация
+
+При первом запуске Telegram пришлёт код в приложение, его нужно
+ввести вручную. Поэтому первый запуск делаем интерактивно, прямо
+в SSH:
+
+```bash
+./telethonbot
+```
+
+Бот спросит номер телефона → код из Telegram → если включён
+двухфакторный пароль, ещё и его. После успешного входа рядом
+появится файл `telethon.session` — это и есть авторизация. Дальше
+бот сам пересылает сообщения.
+
+Убедитесь, что всё работает (отправьте тестовое сообщение в
+исходный чат), и остановите бот: `Ctrl+C`.
+
+### 5. Фоновый запуск через `systemd` (рекомендуется)
+
+`systemd` сам перезапустит бот после падения и после ребута VPS.
+
+Создайте unit-файл:
+
+```bash
+sudo nano /etc/systemd/system/telethonbot.service
+```
+
+Вставьте (замените `user` на вашего пользователя и проверьте
+`WorkingDirectory`):
+
+```ini
+[Unit]
+Description=TelethonBot RedirectMSG
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=user
+WorkingDirectory=/home/user/telethonbot
+ExecStart=/home/user/telethonbot/telethonbot
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Включить и запустить:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now telethonbot
+sudo systemctl status telethonbot
+```
+
+Логи:
+
+```bash
+journalctl -u telethonbot -f          # живой хвост
+journalctl -u telethonbot --since today
+```
+
+Управление:
+
+```bash
+sudo systemctl restart telethonbot
+sudo systemctl stop telethonbot
+```
+
+### Альтернатива: `tmux` / `screen` (без systemd)
+
+Если не хочется возиться с `systemd`:
+
+```bash
+sudo apt install -y tmux
+tmux new -s bot
+./telethonbot
+# отсоединиться, оставив бот работать: Ctrl+B, потом D
+# вернуться в сессию: tmux attach -t bot
+```
+
+Минус: после ребута VPS бот сам не поднимется.
+
+### 6. Обновление до новой версии
+
+```bash
+sudo systemctl stop telethonbot         # если через systemd
+curl -L -o telethonbot.new "https://github.com/<owner>/<repo>/releases/download/vX.Y.Z/TelethonBot-vX.Y.Z-linux"
+chmod +x telethonbot.new
+mv telethonbot.new telethonbot
+sudo systemctl start telethonbot
+```
+
+`.env` и `telethon.session` трогать не нужно — повторная авторизация
+не потребуется.
+
+### Частые проблемы на VPS
+
+- **`Permission denied` при запуске** — забыли `chmod +x telethonbot`.
+- **`./telethonbot: cannot execute binary file`** — скачали Windows
+  `.exe` вместо `-linux`. Перекачайте нужный ассет.
+- **`GLIBC_X.YZ not found`** — слишком старый дистрибутив (например,
+  Ubuntu 18.04). Поднимите версию ОС или запускайте из исходников
+  (см. ниже).
+- **Бот пишет "code"** в systemd-логах и стоит — это первый запуск,
+  нужен интерактивный ввод. Остановите сервис, авторизуйтесь руками
+  (`./telethonbot`), потом снова запускайте через systemd.
+- **MTProxy** — если провайдер VPS режет Telegram, положите рядом
+  `proxies.txt` (см. раздел "Прокси").
+
+---
+
 ## Запуск из исходников (для разработчиков)
 
 ```bash
